@@ -2731,6 +2731,9 @@ void CMainFrame::OnFilePrintconfig()
 void CMainFrame::OnSize(UINT nType, int cx, int cy)
 {
 	CFrameWnd::OnSize(nType, cx, cy);
+	
+	HWND hWnd = GetSafeHwnd();
+	BOOL valid = TraceOnSize(L"CMainFrame", hWnd, nType, cx, cy);
 
 	// TODO: Add your message handler code here
 	int deb1, deb2, deb3, deb4;
@@ -4545,6 +4548,19 @@ void CMainFrame::OnClose()
 				}
 			}
 		}
+	}
+
+	
+	if (listView)
+	{
+		HWND h = CmboxviewApp::GetActiveWndGetSafeHwnd();
+		MboxMail::ShowHint(HintConfig::MailSummaryColumnWidthHint, h);
+
+		int nColWidthArray[6];
+		listView->GetListColumnWidth(&nColWidthArray[0]);
+
+		// section_wnd = CString(sz_Software_mboxview) + L"\\MailSummaryList";
+		BOOL ret = NListView::WriteListColumnWidthToRegistry(&nColWidthArray[0]);
 	}
 
 	CString ActiveMailService = m_mailDB.SMTPConfig.MailServiceName;;

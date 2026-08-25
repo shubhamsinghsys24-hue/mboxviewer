@@ -1066,6 +1066,10 @@ void HtmlUtils::CommonMimeType2DocumentTypes(CStringA &contentType, CStringA &do
 	{
 		documentExtension.Append(".xls");
 	}
+	else if (contentType.CompareNoCase("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") == 0)
+	{
+		documentExtension.Append(".xlsx");
+	}
 	else if (contentType.CompareNoCase("application/xhtml+xml") == 0)
 	{
 		documentExtension.Append(".xhtml");

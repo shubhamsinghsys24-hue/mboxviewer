@@ -687,6 +687,12 @@ public:
 	BOOL m_developmentMode;
 
 	void GetListItemText(int nItem, int nSubItem, CString& txt);
+	void GetListColumnWidth(int nColWidthArray[]);
+	void SetListColumnWidth(int nColWidthArray[]);
+	static BOOL LoadListColumnWidthFromRegistry(int nColWidthArray[]);
+	static BOOL WriteListColumnWidthToRegistry(int nColWidthArray[]);
+
+	void InvalidateMain();
 
 	// Generated message map functions
 protected:

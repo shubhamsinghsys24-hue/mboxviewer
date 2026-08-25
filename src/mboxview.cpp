@@ -96,6 +96,8 @@ CString CmboxviewApp::m_language = L"english";
 
 CWnd* CmboxviewApp::wndFocus = 0;
 
+BOOL CmboxviewApp::m_initInstanceState = FALSE;
+
 int MyMessageBox(HWND h, LPCTSTR lpszText, LPCTSTR lpszCaption, UINT nType)
 {
 	if (CmboxviewApp::m_isRTL == TRUE)
@@ -1810,22 +1812,47 @@ void* __cdecl malloc(size_t size)
 
 
 #include "afxsock.h"
+#include "psapi.h"
 
 BOOL CmboxviewApp::GetProcessPath(CString& procressPath)
 {
-	HMODULE hModule = 0;
 	wchar_t procFileName[512];
 	procFileName[0] = L'\0';
-	DWORD   nSize = 511;
-	DWORD retval = GetModuleFileName(hModule, procFileName, nSize);
-	if (retval == 0)
+	DWORD nSize = 511;
+
+	wchar_t procImageFileName[512];
+	procImageFileName[0] = L'\0';
+	//DWORD nSize = 511;
+
+	CString processFilePath;
+
+	HANDLE hProcess = GetCurrentProcess();
+	DWORD retvalImage = GetProcessImageFileName(hProcess, procImageFileName, nSize);
+	if (retvalImage == 0)
 	{
 		DWORD error = GetLastError();
 		CString errorText = FileUtils::GetLastErrorAsString();
 		TRACE(L"GetProcessPath: error=%d errorText=%s\n", error, errorText);
 		int deb = 1;
+
+		HMODULE hModule = 0;
+		DWORD retval = GetModuleFileName(hModule, procFileName, nSize);
+		if (retval == 0)
+		{
+			DWORD error = GetLastError();
+			CString errorText = FileUtils::GetLastErrorAsString();
+			TRACE(L"GetProcessPath: error=%d errorText=%s\n", error, errorText);
+			int deb = 1;
+		}
+		else
+			processFilePath = procFileName;
 	}
-	CString processFilePath = procFileName;
+	else
+		processFilePath = procImageFileName;
+
+	CString processNameExtension;
+	if (sizeof(INT_PTR) == 8)
+		processNameExtension = L"64";
 
 	procressPath.Empty();
 	wchar_t* pValue;
@@ -1844,7 +1871,6 @@ BOOL CmboxviewApp::GetProcessPath(CString& procressPath)
 		int answer = MyMessageBox(h, txt, L"Info", MB_APPLMODAL | MB_OK);
 #endif
 #endif
-
 		return TRUE;
 	}
 	else
@@ -1867,6 +1893,14 @@ BOOL CmboxviewApp::InitInstance()
 	CString errorText;
 
 	ResHelper::MyTrace(L"CmboxviewApp::InitInstance\n");
+
+#if 0 // _DEBUG
+	HWND hw = NULL; // we don't have any window yet 
+	int answer = MyMessageBox(hw, L"Start Debugger ?", L"Info", MB_APPLMODAL | MB_ICONHAND | MB_OK);
+	BOOL startDebuggerDone = TRUE;
+#endif
+
+	m_initInstanceState = TRUE;
 
 
 	CString allCommanLineOptions(CWinApp::m_lpCmdLine);
@@ -2326,6 +2360,8 @@ int deb = 1;
 	h = CmboxviewApp::GetActiveWndGetSafeHwnd();
 	MboxMail::ShowHint(HintConfig::FontSizeHint, h);
 
+	m_initInstanceState = FALSE;
+
 	return TRUE;
 }
 
@@ -2362,6 +2398,27 @@ void CAboutDlg::OnClose()
 	// TODO: Add your message handler code here and/or call default
 
 	CDialog::OnClose();
+}
+
+BOOL TraceOnSize(wchar_t* wndName, HWND hWnd, UINT nType, int cx, int cy)
+{
+	if (hWnd == 0)
+		return FALSE;
+
+	CRect rc;
+	GetWindowRect(hWnd , &rc);
+	int ww = rc.Width();
+	int wh = rc.Height();
+
+	CRect r;
+	GetClientRect(hWnd, r);
+	int cw = r.Width();
+	int ch = r.Height();
+
+	TRACE(L"%s::OnSize(nType=%u, cx=%d, cy=%d GetWindowRect: w=%d h=%d GetClientRect: w=%d h=%d\n", 
+		wndName, nType, cx, cy, ww, wh, cw, ch);
+
+	return TRUE;
 }
 
 

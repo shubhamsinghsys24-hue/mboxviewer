@@ -310,6 +310,16 @@ int NTreeView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 void NTreeView::OnSize(UINT nType, int cx, int cy)
 {
 	CWnd::OnSize(nType, cx, cy);
+	
+	HWND hWnd = GetSafeHwnd();
+	BOOL valid = TraceOnSize(L"NTreeView", hWnd, nType, cx, cy);
+
+	// When resizing the Main Frame, list window cy/height doesn't change while msg window cy changes
+	// Not sure what is the solution. 
+	// CMainFrame::OnTreeHide() is doing possibly what we want but it is complicated; need better and simpler solution
+
+	if ((cy <= 0) || (cy <= 0))
+		return;
 
 	CMainFrame* pFrame = DYNAMIC_DOWNCAST(CMainFrame, AfxGetApp()->m_pMainWnd);
 	if (pFrame)
@@ -2094,7 +2104,8 @@ void NTreeView::OnSelchanged(NMHDR* pNMHDR, LRESULT* pResult)
 					CString mboxviewPath = CMainFrame::m_processPath;
 					INT nShowCmd = SW_SHOWNORMAL;
 					
-					result = ShellExecute(NULL, L"open", mboxviewPath, emlFileNamePath, msg2emlCachePath, SW_SHOWNORMAL);
+					CString emlFNamePath = "\"" + emlFileNamePath + "\"";
+					result = ShellExecute(NULL, L"open", mboxviewPath, emlFNamePath, msg2emlCachePath, SW_SHOWNORMAL);
 					if ((UINT_PTR)result <= MaxShellExecuteErrorCode)
 					{
 						CString errorText;
@@ -3586,7 +3597,12 @@ void NTreeView::OnRClick(NMHDR* pNMHDR, LRESULT* pResult)
 		MyAppendMenu(&menu, M_MergeMailArchiveFiles_Id, L"Merge Mail Archive Files");
 		// Outlook msg
 		const UINT M_MergeOutlookMsgMailFiles_Id = 7;
-		MyAppendMenu(&menu, M_MergeOutlookMsgMailFiles_Id, L"Merge Outlook Msg Mail Files");
+
+		CString folder = MboxMail::GetLastPath();
+		CString extension = L"*.msg";
+		int has = CMainFrame::CountMailFilesInFolder(folder, extension);
+		if (has)
+			MyAppendMenu(&menu, M_MergeOutlookMsgMailFiles_Id, L"Merge Outlook Msg Mail Files");
 
 		int index = 1;
 		ResHelper::LoadMenuItemsInfo(&menu, index);

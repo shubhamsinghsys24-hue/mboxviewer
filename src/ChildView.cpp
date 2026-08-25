@@ -335,7 +335,19 @@ void CChildView::GetMsgPosition(int &row, int &col)
 void CChildView::OnSize(UINT nType, int cx, int cy) 
 {
 	CWnd::OnSize(nType, cx, cy);
-	
+
+	HWND hWnd = GetSafeHwnd();
+	BOOL valid = TraceOnSize(L"CChildView", hWnd, nType, cx, cy);
+
+
+	// When resizing the Main Frame, list window cy/height doesn't change while msg window cy changes
+	// Not sure what is the solution. 
+	// CMainFrame::OnTreeHide() is doing possibly what we want but it is complicated; need better and simpler solution
+
+
+	if ((cy <= 0) || (cy <= 0))
+		return;
+
 	m_verSplitter.MoveWindow(0, 0, cx, cy);	
 }
 

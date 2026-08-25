@@ -55,6 +55,7 @@
 #include "MyTcpClient.h"
 #include "GdiUtils.h"
 #include "ResHelper.h"
+#include "mimetypes.h"
 
 
 #ifdef _DEBUG
@@ -2611,6 +2612,16 @@ void NListView::SetLabelOwnership()
 void NListView::OnSize(UINT nType, int cx, int cy)
 {
 	CWnd::OnSize(nType, cx, cy);
+	
+	HWND hWnd = GetSafeHwnd();
+	BOOL valid = TraceOnSize(L"NListView", hWnd, nType, cx, cy);
+
+	// When resizing the Main Frame, list window cy/height doesn't change while msg window cy changes
+	// Not sure what is the solution. 
+	// CMainFrame::OnTreeHide() is doing possibly what we want but it is complicated; need better and simpler solution
+
+	if ((cy <= 0) || (cy <= 0))
+		return;
 
 	ResizeColumns();
 
@@ -2642,14 +2653,145 @@ void NListView::OnSize(UINT nType, int cx, int cy)
 	m_list.MoveWindow(0, 0, cx, cy);
 }
 
+void NListView::GetListColumnWidth(int nColWidthArray[])
+{
+	nColWidthArray[0] = m_list.GetColumnWidth(0);
+	nColWidthArray[1] = m_list.GetColumnWidth(1);
+	nColWidthArray[2] = m_list.GetColumnWidth(2);
+	nColWidthArray[3] = m_list.GetColumnWidth(3);
+	nColWidthArray[4] = m_list.GetColumnWidth(4);
+	nColWidthArray[5] = m_list.GetColumnWidth(5);
+}
+
+void NListView::SetListColumnWidth(int nColWidthArray[])
+{
+	for (int i = 0; i < 6; i++)
+	{
+		m_list.SetColumnWidth(i, nColWidthArray[i]);
+	}
+}
+
+BOOL NListView::LoadListColumnWidthFromRegistry(int nColWidthArray[])
+{
+	CString section_wnd = CString(sz_Software_mboxview) + L"\\MailSummaryList";
+
+	BOOL ret = CProfile::_GetProfileInt(HKEY_CURRENT_USER, section_wnd, L"AttachmentColumnWidth", nColWidthArray[0]);
+	if (!ret) goto fail;
+	ret = CProfile::_GetProfileInt(HKEY_CURRENT_USER, section_wnd, L"DateColumnWidth", nColWidthArray[1]);
+	if (!ret) goto fail;
+	ret = CProfile::_GetProfileInt(HKEY_CURRENT_USER, section_wnd, L"FromColumnWidth", nColWidthArray[2]);
+	if (!ret) goto fail;
+	ret = CProfile::_GetProfileInt(HKEY_CURRENT_USER, section_wnd, L"ToColumnWidth", nColWidthArray[3]);
+	if (!ret) goto fail;
+	ret = CProfile::_GetProfileInt(HKEY_CURRENT_USER, section_wnd, L"SubjectColumnWidth", nColWidthArray[4]);
+	if (!ret) goto fail;
+	ret = CProfile::_GetProfileInt(HKEY_CURRENT_USER, section_wnd, L"SizeColumnWidth", nColWidthArray[5]);
+	if (!ret) goto fail;
+
+	return TRUE;
+	fail:
+		for (int i = 0; i < 6; i++) nColWidthArray[i] = 0;  // = -1 ??
+	return FALSE;
+}
+
+BOOL NListView::WriteListColumnWidthToRegistry(int nColWidthArray[])
+{
+	_ASSERTE(nColWidthArray != 0);
+	if (nColWidthArray == 0)
+		return FALSE;
+
+	CString section_wnd = CString(sz_Software_mboxview) + L"\\MailSummaryList";
+
+	BOOL ret = CProfile::_WriteProfileInt(HKEY_CURRENT_USER, section_wnd, L"AttachmentColumnWidth", nColWidthArray[0]);
+	ret = CProfile::_WriteProfileInt(HKEY_CURRENT_USER, section_wnd, L"DateColumnWidth", nColWidthArray[1]);
+	ret = CProfile::_WriteProfileInt(HKEY_CURRENT_USER, section_wnd, L"FromColumnWidth", nColWidthArray[2]);
+	ret = CProfile::_WriteProfileInt(HKEY_CURRENT_USER, section_wnd, L"ToColumnWidth", nColWidthArray[3]);
+	ret = CProfile::_WriteProfileInt(HKEY_CURRENT_USER, section_wnd, L"SubjectColumnWidth", nColWidthArray[4]);
+	ret = CProfile::_WriteProfileInt(HKEY_CURRENT_USER, section_wnd, L"SizeColumnWidth", nColWidthArray[5]);
+
+	return TRUE;
+}
+
+void NListView::InvalidateMain()
+{
+	CMainFrame* pFrame = DYNAMIC_DOWNCAST(CMainFrame, AfxGetApp()->m_pMainWnd);
+	if (pFrame)
+		pFrame->Invalidate();
+}
+
 void NListView::ResizeColumns()
 {
+	CPaintDC dc(&m_list);
+	HDC hDC = dc.GetSafeHdc();
+
+	SIZE sizeItem;
+	if (hDC)
+	{
+		CString dateText = L"12/29/2025 59:59";
+		BOOL retA = GetTextExtentPoint32(hDC, dateText, dateText.GetLength(), &sizeItem);
+	}
+
 	CRect rc;
 	GetWindowRect(&rc);
 	int w = rc.Width();
 	int sb_width = GetSystemMetrics(SM_CXVSCROLL);
-	//w -= sb_width + 6;
 	w -= sb_width;
+
+	if (!CmboxviewApp::m_initInstanceState)
+	{
+		int nTextWidth0 = m_list.GetColumnWidth(0);
+		int nTextWidth1 = m_list.GetColumnWidth(1);
+		int nTextWidth2 = m_list.GetColumnWidth(2);
+		int nTextWidth3 = m_list.GetColumnWidth(3);
+		int nTextWidth4 = m_list.GetColumnWidth(4);
+		int nTextWidth5 = m_list.GetColumnWidth(5);
+
+		int nTotalColumnWidth = nTextWidth0 + nTextWidth1 + nTextWidth2 + nTextWidth3 + nTextWidth4 + nTextWidth5;
+
+		int fixedWidth = nTextWidth0 + nTextWidth1 + nTextWidth5;
+		float adjust = (float)(w - fixedWidth)/ (nTotalColumnWidth - fixedWidth);
+		//nTextWidth0 = (int)(nTextWidth0*adjust);
+		//nTextWidth1 = (int)(nTextWidth1*adjust);
+		nTextWidth2 = (int)(nTextWidth2 * adjust);
+		nTextWidth3 = (int)(nTextWidth3 * adjust);
+		nTextWidth4 = (int)(nTextWidth4 * adjust);
+		//nTextWidth5 = (int)(nTextWidth5 * adjust);
+
+		int nTotalColumnWidth2 = nTextWidth0 + nTextWidth1 + nTextWidth2 + nTextWidth3 + nTextWidth4 + nTextWidth5;
+		if (nTotalColumnWidth2 > w)
+		{
+			nTextWidth4 -= nTotalColumnWidth2 > w;
+		}
+
+		m_list.SetColumnWidth(0, nTextWidth0);
+		m_list.SetColumnWidth(1, nTextWidth1);
+		m_list.SetColumnWidth(2, nTextWidth2);
+		m_list.SetColumnWidth(3, nTextWidth3);
+		m_list.SetColumnWidth(4, nTextWidth4);
+		m_list.SetColumnWidth(5, nTextWidth5);
+
+		m_list.Invalidate();
+
+		int nColWidthArray[6];
+		GetListColumnWidth(&nColWidthArray[0]);
+		_ASSERTE((nTextWidth0 > 0) ? (nColWidthArray[0] == nTextWidth0) : TRUE);
+		_ASSERTE((nTextWidth1 > 0) ? (nColWidthArray[1] == nTextWidth1) : TRUE);
+		_ASSERTE((nTextWidth2 > 0) ? (nColWidthArray[2] == nTextWidth2) : TRUE);
+		_ASSERTE((nTextWidth3 > 0) ? (nColWidthArray[3] == nTextWidth3) : TRUE);
+		_ASSERTE((nTextWidth4 > 0) ? (nColWidthArray[4] == nTextWidth4) : TRUE);
+		_ASSERTE((nTextWidth5 > 0) ? (nColWidthArray[5] == nTextWidth5) : TRUE);
+
+		return;
+	}
+
+	int nColWidthArray[6];
+	BOOL retLoad = NListView::LoadListColumnWidthFromRegistry(nColWidthArray);
+	if (retLoad)
+	{
+		SetListColumnWidth(nColWidthArray);
+		m_list.Invalidate();
+		return;
+	}
 
 	int col_zero_len = 22;
 	int date_len = 100;
@@ -2661,16 +2803,6 @@ void NListView::ResizeColumns()
 	int dflt_subj_len = 400;
 	int min_size_len = 80;
 	int size_len = min_size_len;
-
-	CPaintDC dc(&m_list);
-	HDC hDC = dc.GetSafeHdc();
-
-	SIZE sizeItem;
-	if (hDC)
-	{
-		CString dateText = L"12/29/2025 59:59";
-		BOOL retA = GetTextExtentPoint32(hDC, dateText, dateText.GetLength(), &sizeItem);
-	}
 	 
 	//  GetTextExtentPoint32 doesn't work; hardcore dat_len
 	if (CMainFrame::m_cnfFontSize != CMainFrame::m_dfltFontSize)
@@ -2745,7 +2877,7 @@ void NListView::ResizeColumns()
 
 	//RedrawMails();
 	//RedrawWindow();
-	// Unfortunatelly painting is not always workin; some columns end up blank and user
+	// Unfortunately painting is not always working; some columns end up blank and user
 	//is force to refresh
 	m_list.Invalidate();
 }
@@ -4990,6 +5122,7 @@ int NListView::SelectItem(int iItem, BOOL ignoreViewMessageHeader /* dflt = FALS
 		char* inData = outbuflarge->Data();
 		int inDataLen = outbuflarge->Count();  // SimpleString* outbuflarge = MboxMail::m_outdata;
 
+		// 07/14/2026 Handling of bdycharset needs review; it is likely too much and may need to be simplified
 		CStringA bdycharset = "UTF-8";
 		if (pageCode == 0)
 		{
@@ -5246,6 +5379,8 @@ int NListView::SelectItem(int iItem, BOOL ignoreViewMessageHeader /* dflt = FALS
 
 		SimpleString* result = 0;
 		BOOL retResult = FALSE;
+
+		// 07/14/2026 Handling of bdycharset needs review; it is likely too much and may need to be simplified
 		UINT strCodePage = pageCode;
 #if 0
 		if ((strCodePage == 50220)
@@ -5281,6 +5416,7 @@ int NListView::SelectItem(int iItem, BOOL ignoreViewMessageHeader /* dflt = FALS
 				result = 0;
 		}
 
+		//if (bdycharset.IsEmpty() || (bdycharset.CompareNoCase("us-ascii") == 0))
 		if (bdycharset.IsEmpty())
 			bdycharset = "UTF-8";
 
@@ -14016,6 +14152,34 @@ int NListView::DetermineAttachmentName(CFile *fpm, int mailPosition, MailBodyCon
 			}
 			else
 				; // just return cStrNameW
+		}
+		else
+		{
+#if 0
+			// Guessing doesn't work relibaly so far
+			// May need more time to figure out if there is the way to validate extension
+			// May need to look the content, it is problematic
+			CStringA nameExtensionA = nameExtensionW;
+			std::string mimeType;
+			std::string std_nameExtensionA(nameExtensionA);
+			mimeType = mimetypes::from_extension(std_nameExtensionA);
+
+			if (mimeType.empty())
+			{
+				CString standardDocumentExtensionA;
+				HtmlUtils::CommonMimeType2DocumentTypes(body->m_contentType, standardDocumentExtensionA);
+				CString standardDocumentExtensionW = standardDocumentExtensionA;
+
+				if (!standardDocumentExtensionW.IsEmpty())
+				{
+					CString standardExtensionW = standardDocumentExtensionW.Mid(1);
+					if (nameExtensionW.CompareNoCase(standardExtensionW) != 0)
+					{
+						cStrNameW += standardDocumentExtensionW;
+					}
+				}
+			}
+#endif
 		}
 	}
 	else  // cStrNameW.IsEmpty()

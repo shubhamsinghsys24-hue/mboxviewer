@@ -164,7 +164,8 @@ public:
 		LabelsHint = 14,
 		SubjectSortingHint = 15,
 		FontSizeHint = 16,
-		MaxHintNumber = 17
+		MailSummaryColumnWidthHint = 17,
+		MaxHintNumber = 18
 	};
 };
 

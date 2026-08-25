@@ -2,6 +2,7 @@ Simple mbox viewer
 =======
 
 A simple but powerful viewer to view mbox files such as Thunderbird Archives, Google mail archives, simple Eml files and Outlook msg files.
+Users data remains private. Users emails are processed entirely on your local machine. 
 [![Download Windows MBox Viewer](https://img.shields.io/sourceforge/dm/mbox-viewer.svg)](https://sourceforge.net/projects/mbox-viewer/files/latest/download)
 
 Supported OS
@@ -116,7 +117,7 @@ User can view individual .msg file or all .msg files can be converted to .eml fi
 
 Processing of .msg files is quite complicated and requires significant effort. This initial release doesn't support:
 
-1. message body encoded as RTF Text. This usually is not a problem since typically the message is included multiple times in the mail as Plain, HTML or RTF HTML text encoded body.
+1. message body encoded as RTF Text. This usually is not a problem since typically the user message is included multiple times in the mail as Plain, HTML or RTF HTML text encoded body.
 
 User feedback will help to decide whether additional development effort is justified.
 

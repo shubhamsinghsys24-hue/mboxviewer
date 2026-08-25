@@ -1071,7 +1071,11 @@ bool IsFromValidDelimiter(char* p, char* e)
 	//CString from;
 
 	// Which header fields  are required to validate email header ???
-	while (p < (e - cFromLen))
+	// Get entire header ? instead of below?  !!!
+	BOOL doneOnce = FALSE;
+	char* p_save = p;
+	char* end = e - cFromLen;
+	while (p < end)
 	{
 		if (bFrom && TextUtilsEx::strncmpUpper2Lower(p, e, cFrom, cFromLen) == 0)
 		{
@@ -1083,16 +1087,71 @@ bool IsFromValidDelimiter(char* p, char* e)
 #endif
 			return true;
 		}
+		else if (bFrom && TextUtilsEx::strncmpUpper2Lower(p, e, cSubject, cSubjectLen) == 0)
+		{
+			return true;
+		}
 		else
 		{
 			bool isEmpty = false;
 			char* psave = p;
 			p = MimeParser::EatNewLine(p, e, isEmpty);
-
 			if (isEmpty)
 			{
 				return false;
 			}
+			else if ((TextUtilsEx::strncmpExact(p, e, cFromMailBegin, cFromMailBeginLen) == 0))
+				return false;
+#if 1
+			else if (doneOnce == FALSE)
+			{
+				if (bFrom && TextUtilsEx::strncmpUpper2Lower(p, e, cFrom, cFromLen) == 0)
+				{
+					return true;
+				}
+				else if (bFrom && TextUtilsEx::strncmpUpper2Lower(p, e, cSubject, cSubjectLen) == 0)
+				{
+					return true;
+				}
+				doneOnce = TRUE;
+				char c = *p;
+				if ((c == ' ') || (c == '\t') || (c == '\r') || (c == '\n'))
+				{
+					continue;
+				}
+
+				// check if valid hdr line; search for ':' character
+				BOOL found = FALSE;
+				while (p < end)
+				{
+					c = *p;
+					if ((c != '\r') && (c != '\n'))
+					{
+						if (c == ':')
+						{
+							found = TRUE;
+							break;
+						}
+						else
+							p++;
+					}
+					else
+						break;
+				}
+				if (found)
+				{
+					// ':' found
+					char* p_save = p;
+					p = MimeParser::EatNewLine(p, e, isEmpty);
+					if (isEmpty)
+					{
+						return false;
+					}
+				}
+				else
+					return false;
+			}
+#endif
 		}
 	}
 	return false;
@@ -1809,7 +1868,7 @@ bool MboxMail::Process(CString &filePath, ProgressTimer& progressTimer, register
 
 							int index = s_mails.GetCount() - 1;
 
-							if (s_mails.GetCount() == 11680)
+							if (s_mails.GetCount() == 37)
 								int deb = 1;
 
 							UINT_PTR dwProgressbarPos = 0;
@@ -7773,13 +7832,17 @@ int MboxMail::AppendInlineAttachmentNameSeparatorLine(MailBodyContent* body, int
 	return 0;
 }
 
-
-// Quite messy !!! Need cleaner solution. Find time. FIXMEFIXME
-int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf, UINT &pageCode, int textType, int plainTextMode)
+// Merging multiple Html blocks needs more work likely
+// Simple merging of multiple Html content may not work well
+// Definitions such as Font size, etc may leak from one html to another and affect layout
+// May have to do something similar to what is done when user selects multiple emails to open in web browser
+// Goal is is isolate local definitions within each html content
+int MboxMail::GetMailBody_mboxview(CFile& fpm, MboxMail* m, SimpleString* outbuf, UINT& pageCode, int textType, int plainTextMode)
 {
 	// Need to handle Content-Type: multipart/alternative; to properly display multiple html block with embedded images ???
 
 	_int64 fileOffset;
+	int totalBodyCnt = 0;
 	int bodyCnt = 0;
 
 	// We are using global buffers so check and assert if we collide. 
@@ -7797,10 +7860,10 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 
 	UINT CP_US_ASCII = 20127;
 	DWORD error;
+	UINT bodyPageCode;
 
 
-	// inspect all text blocks to determine if plain text re-encoding to UTF8 is needed
-	// what about re-encoding of Html text blocks ??
+	// inspect all text plan and html blocks to determine if plain text re-encoding to UTF8 is needed
 	for (int j = 0; j < m->m_ContentDetailsArray.size(); j++)
 	{
 		body = m->m_ContentDetailsArray[j];
@@ -7820,18 +7883,20 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 		if (body->m_contentDisposition.CompareNoCase("attachment") == 0)
 			continue;
 
-		if (bodyCnt == 0)
+		bodyPageCode = body->m_pageCode;
+		if (bodyPageCode == 0)
+			bodyPageCode = CP_US_ASCII;
+
+		if (totalBodyCnt == 0)
 		{
-			pageCode = body->m_pageCode;
-			if (textType == 1)
-				break; // return pageCode of the first Html block. Asking for trouble !!!
+			pageCode = bodyPageCode;
 		}
-		else if (pageCode != body->m_pageCode)
+		else if (bodyPageCode != pageCode)
 		{
 			pageCode = CP_UTF8;
 			break;
 		}
-		bodyCnt++;
+		totalBodyCnt++;
 	}
 
 	bodyCnt = 0;
@@ -7900,16 +7965,6 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 			continue;
 		}
 
-		if (textType == 1)  // HTML
-		{
-			// don't expect more than one Html block for typical MIME tree, however
-			// Simple merging of multiple Html content may not work well
-			// Definitions such as Font size, etc may leak from one html to another and affect layout
-			// May have to do something similar to what is done when user selects multiple emails to open in web browser
-			// Goal is is isolate local definitions within each html content
-			_ASSERTE(bodyCnt == 0); 
-		}
-
 		int bodyLength = body->m_contentLength;
 		if ((body->m_contentOffset + body->m_contentLength) > m->m_length)
 		{
@@ -7930,6 +7985,10 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 			bodyLength = retlen;
 		}
 
+		bodyPageCode = body->m_pageCode;
+		if (bodyPageCode == 0)
+			bodyPageCode = CP_US_ASCII;
+
 		if (body->m_contentTransferEncoding.CompareNoCase("base64") == 0)
 		{
 			MboxCMimeCodeBase64 d64(bodyBegin, bodyLength);
@@ -7938,8 +7997,16 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 			int needLength = dlength + outbuf->Count() + 512;
 			outbuf->Resize(needLength);
 
-			if ((body->m_pageCode == pageCode) || (textType == 1))  // no re-encode of Html bloks
+			if (bodyPageCode == pageCode)
 			{
+				if (bodyCnt > 0)
+				{
+					if (textType == 1)
+						outbuf->Append("<br>");
+					else
+						outbuf->Append("\r\n");
+				}
+
 				char* outptr = outbuf->Data(outbuf->Count());
 
 				AppendInlineAttachmentNameSeparatorLine(body, bodyCnt, outbuf, textType);
@@ -7970,8 +8037,16 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 			int needLength = dlength + outbuf->Count() + 512;
 			outbuf->Resize(needLength);
 
-			if ((body->m_pageCode == pageCode) || (textType == 1))  // no re-encode of Html blocks
+			if (bodyPageCode == pageCode)
 			{
+				if (bodyCnt > 0)
+				{
+					if (textType == 1)
+						outbuf->Append("<br><br>");
+					else
+						outbuf->Append("\r\n\r\n");
+				}
+
 				char* outptr = outbuf->Data(outbuf->Count());
 
 				AppendInlineAttachmentNameSeparatorLine(body, bodyCnt, outbuf, textType);
@@ -7996,11 +8071,16 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 		}
 		else
 		{
-			//_ASSERTE(body->m_contentTransferEncoding.IsEmpty());
-			// no decoding needed ??
-
-			if ((body->m_pageCode == pageCode) || (textType == 1))  // no re-encode of Html
+			if (bodyPageCode == pageCode)
 			{
+				if (bodyCnt > 0)
+				{
+					if (textType == 1)
+						outbuf->Append("<br><br>");
+					else
+						outbuf->Append("\r\n\r\n");
+				}
+
 				AppendInlineAttachmentNameSeparatorLine(body, bodyCnt, outbuf, textType);
 				outbuf->Append(bodyBegin, bodyLength);
 			}
@@ -8010,10 +8090,11 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 			}
 		}
 
-		if (tmpbuf->Count() == 0)  // no re-encode of Html
+		if (tmpbuf->Count() == 0)
 			;
-		else if (body->m_pageCode != pageCode)
+		else if (bodyPageCode != pageCode)
 		{
+			_ASSERTE((tmpbuf->Count() > 0) && (bodyPageCode != pageCode));
 			SimpleString* result;
 			SimpleString* wBuff = MboxMail::m_largelocal1;
 			wBuff->ClearAndResize(4 * tmpbuf->Count());
@@ -8022,14 +8103,22 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 			result->ClearAndResize(4 * tmpbuf->Count());
 
 			// TODO: make wBuff local to Str2UTF8
-			BOOL retResult = TextUtilsEx::Str2UTF8(tmpbuf, body->m_pageCode, result, wBuff, error);
+			BOOL retResult = TextUtilsEx::Str2UTF8(tmpbuf, bodyPageCode, result, wBuff, error);
+
+			if (bodyCnt > 0)
+			{
+				if (textType == 1)
+					outbuf->Append("<br><br>");
+				else
+					outbuf->Append("\r\n\r\n");
+			}
 
 			AppendInlineAttachmentNameSeparatorLine(body, bodyCnt, outbuf, textType);
 
 			if (retResult == TRUE)
 				outbuf->Append(result->Data(), result->Count());
 			else
-				outbuf->Append(tmpbuf->Data(), tmpbuf->Count());
+				outbuf->Append(tmpbuf->Data(), tmpbuf->Count());  // suspect but do it anyway
 		}
 
 		bodyCnt++;
@@ -8040,7 +8129,6 @@ int MboxMail::GetMailBody_mboxview(CFile &fpm, MboxMail *m, SimpleString *outbuf
 
 	return outbuf->Count();
 }
-
 
 // TODO: Not used currently and code incomplete. might be used to dynamically create image files
 int MboxMail::CreateImgAttachmentFiles(CFile &fpm, int mailPosition, SimpleString *outbuf)
@@ -11757,7 +11845,14 @@ void MboxMail::CreateHintText(int hintNumber, CString& hintText)
 			L"You can change the Font Size of GUI objects by selecting \"File->Font Config\" option.\n"
 			"\n"
 		);
-		}
+	}
+	else if (hintNumber == HintConfig::MailSummaryColumnWidthHint)
+	{
+		hintText.Append(
+			L"Upon MBoxViewer exit, the width of all mail summary list column will be saved into the registry and restored upon startup.\n"
+			"\n"
+		);
+	}
 }
 
 // Fix static buffer allocation, it is bad !!!

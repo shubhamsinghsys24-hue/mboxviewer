@@ -3170,7 +3170,10 @@ HANDLE OutlookMessage::FileOpen(wchar_t* cStrNamePath, CString& errorText, BOOL 
 void OutlookMessage::FileClose(HANDLE hFile)
 {
 	if (hFile != INVALID_HANDLE_VALUE)
-		CloseHandle(hFile);
+	{
+		BOOL retvalFlush = FlushFileBuffers(hFile);
+		BOOL retvalClose = CloseHandle(hFile);
+	}
 }
 
 int IsValidOutlookMsgFile(CString& fname)

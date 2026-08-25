@@ -307,7 +307,17 @@ void NMsgView::OnSize(UINT nType, int cx, int cy)
 	int deb1, deb2, deb3, deb4;
 	CWnd::OnSize(nType, cx, cy);
 
-	TRACE(L"OnSize: c=%d cy=%d\n", cx, cy);
+	HWND hWnd = GetSafeHwnd();
+	BOOL valid = TraceOnSize(L"NMsgView", hWnd, nType, cx, cy);
+
+
+	// When resizing the Main Frame, list window cy/height doesn't change while msg window cy changes
+	// Not sure what is the solution. 
+	// CMainFrame::OnTreeHide() is doing possibly what we want but it is complicated; need better and simpler solution
+
+
+	if ((cy <= 0) || (cy <= 0))
+		return;
 
 	CRect r;
 	GetClientRect(r);
@@ -507,8 +517,11 @@ void NMsgView::CalculateViewRec(CRect& rc, int cx, int cy)
 		totalLen += itemWidth;
 	}
 
-	int extraLine = (totalLen % (cx-18)) ? 1 : 0;
-	int lcnt = totalLen / (cx-18) + extraLine;
+	int cx_adj = cx - 18;
+	if (cx_adj <= 0)
+		cx_adj = 1;
+	int extraLine = (totalLen % (cx_adj)) ? 1 : 0;
+	int lcnt = totalLen / (cx_adj) + extraLine;
 	if (longLineCnt)
 		lcnt++;
 
@@ -1925,7 +1938,7 @@ int NMsgView::ShowMailTextBlock(int mailPosition, int textType)
 	if (m_hdrDataTmp.Count() > 0)
 	{
 		char *p = m_hdrDataTmp.Data();
-		// CFile Read removes CR and therfore we need to add CR, great  !!
+		// CFile Read removes CR and therefore we need to add CR, great  !!
 		char *ms = strchr(p, '\n');
 		if (ms)
 		{

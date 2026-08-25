@@ -123,6 +123,8 @@ public:
 
 	static CWnd* wndFocus;
 
+	static BOOL m_initInstanceState;
+
 public:
 	//{{AFX_MSG(CmboxviewApp)
 	afx_msg void OnAppAbout();
@@ -143,6 +145,7 @@ int AttachIcon(CMenu* Menu, LPCWSTR MenuName, int resourceId, CBitmap  &cmap);
 void Com_Initialize();
 void SetMyExceptionHandler();
 void UnSetMyExceptionHandler();
+BOOL TraceOnSize(wchar_t* wndName, HWND hWnd, UINT nType, int cx, int cy);
 
 /////////////////////////////////////////////////////////////////////////////
 
